@@ -109,8 +109,23 @@ function App() {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'instructions' | 'websocket'>('dashboard')
   const [wsMessages, setWsMessages] = useState<WsMessage[]>([])
   const [wsInput, setWsInput] = useState('')
+  const [loadingDevices, setLoadingDevices] = useState(true)
   const wsRef = useRef<WebSocket | null>(null)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  const fetchDevices = useCallback(async () => {
+    try {
+      const res = await fetch('/api/devices')
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const list: Device[] = await res.json()
+      setDevices(list)
+      setSelectedDevice(prev => prev && list.some(d => d.id === prev) ? prev : (list[0]?.id ?? null))
+    } catch {
+      // backend unreachable — keep local state, demo mode still works
+    } finally {
+      setLoadingDevices(false)
+    }
+  }, [])
 
   const addWsMessage = (msg: Omit<WsMessage, 'time'>) => {
     setWsMessages(prev => [...prev.slice(-50), { ...msg, time: new Date().toLocaleTimeString() }])
@@ -190,25 +205,41 @@ function App() {
     }
   }
 
-  const addDevice = (e: React.FormEvent) => {
+  const addDevice = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!newDeviceId.trim()) return
     const id = newDeviceId.trim()
-    const newDevice: Device = {
-      id,
-      name: `ESP8266-${id.slice(-4)}`,
-      status: 'online',
-      registeredAt: new Date().toISOString(),
-      lastUpdate: new Date().toISOString(),
-    }
-    setDevices(prev => [...prev, newDevice])
-    setSensorData(prev => ({ ...prev, [id]: generateMockData(id) }))
     setNewDeviceId('')
-    if (!selectedDevice) setSelectedDevice(id)
+    try {
+      const res = await fetch('/api/devices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deviceId: id }),
+      })
+      if (res.ok) {
+        await fetchDevices()
+        setSensorData(prev => ({ ...prev, [id]: generateMockData(id) }))
+        if (!selectedDevice) setSelectedDevice(id)
+      }
+    } catch {
+      // fallback: add locally when backend unreachable
+      const newDevice: Device = {
+        id, name: `ESP8266-${id.slice(-4)}`, status: 'online',
+        registeredAt: new Date().toISOString(), lastUpdate: new Date().toISOString(),
+      }
+      setDevices(prev => [...prev, newDevice])
+      setSensorData(prev => ({ ...prev, [id]: generateMockData(id) }))
+      if (!selectedDevice) setSelectedDevice(id)
+    }
   }
 
-  const removeDevice = (deviceId: string) => {
-    setDevices(prev => prev.filter(d => d.id !== deviceId))
+  const removeDevice = async (deviceId: string) => {
+    try {
+      await fetch(`/api/devices/${deviceId}`, { method: 'DELETE' })
+      await fetchDevices()
+    } catch {
+      setDevices(prev => prev.filter(d => d.id !== deviceId))
+    }
     if (selectedDevice === deviceId) setSelectedDevice(null)
   }
 
@@ -225,12 +256,13 @@ function App() {
   }
 
   useEffect(() => {
+    fetchDevices()
     connectWebSocket()
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current)
       wsRef.current?.close()
     }
-  }, [connectWebSocket])
+  }, [fetchDevices, connectWebSocket])
 
   return (
     <div className="app">
@@ -255,7 +287,9 @@ function App() {
           <div>
             <h2>Devices</h2>
             <div className="device-list">
-              {devices.length === 0 ? (
+              {loadingDevices ? (
+                <div className="empty-state"><p>Loading devices...</p></div>
+              ) : devices.length === 0 ? (
                 <div className="empty-state"><p>No devices connected</p></div>
               ) : (
                 devices.map(device => (
