@@ -3,13 +3,8 @@
   "buildCommand": "npm run build:client",
   "outputDirectory": "dist/public",
   "framework": null,
-  "functions": {
-    "src/server/index.ts": {
-      "runtime": "@vercel/node@3"
-    }
-  },
   "rewrites": [
-    { "source": "/api/:path*", "destination": "/src/server/index.ts" },
+    { "source": "/api/:path*", "destination": "/api/index" },
     { "source": "/((?!api).*)", "destination": "/index.html" }
   ]
 }
