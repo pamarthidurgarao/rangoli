@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import type { SendCommandRequest, CommandResult } from '../../shared/types.js'
 import { devices } from './devices.js'
+import logger from '../logger.js'
 
 const router = Router()
 
@@ -39,11 +40,13 @@ router.post('/', (req, res) => {
   const { deviceId, command } = req.body as SendCommandRequest
 
   if (!deviceId || !command) {
+    logger.warn({ ip: req.ip, body: req.body }, 'POST /api/command - missing deviceId or command')
     res.status(400).json({ error: 'deviceId and command are required' })
     return
   }
 
   if (!devices.has(deviceId)) {
+    logger.warn({ ip: req.ip, deviceId, command }, 'POST /api/command - device not found')
     res.status(404).json({ error: 'Device not found' })
     return
   }
@@ -52,7 +55,9 @@ router.post('/', (req, res) => {
   device.lastUpdate = new Date().toISOString()
   devices.set(deviceId, device)
 
-  res.json(getCommandResponse(deviceId, command))
+  const result = getCommandResponse(deviceId, command)
+  logger.info({ ip: req.ip, deviceId, command, success: result.success }, 'Command executed')
+  res.json(result)
 })
 
 export default router
