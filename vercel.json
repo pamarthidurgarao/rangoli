@@ -1,0 +1,13 @@
+{
+  "buildCommand": "npm run build",
+  "installCommand": "npm install",
+  "outputDirectory": "dist/public",
+  "builds": [
+    { "src": "dist/server.js", "use": "@vercel/node" }
+  ],
+  "routes": [
+    { "src": "/api/(.*)", "dest": "/dist/server.js" },
+    { "src": "/ws", "dest": "/dist/server.js" },
+    { "src": "/(.*)", "dest": "/dist/public/$1" }
+  ]
+}
