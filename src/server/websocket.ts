@@ -58,9 +58,9 @@ export function setupWebSocket(server: Server): void {
     const clientId = `ws-${clientCount}`
     logger.info({ clientId, clientIp, totalClients: wss.clients.size }, 'WebSocket client connected')
 
-    setInterval(() => {
-      ws.send("Hello from local server");
-    }, 3000);
+    // setInterval(() => {
+    //   ws.send("Hello from local server");
+    // }, 3000);
 
     ws.on('message', (raw) => {
       const rawStr = raw.toString()
@@ -99,7 +99,7 @@ export function setupWebSocket(server: Server): void {
             sensorHistory.set(msg.deviceId, history)
 
             logger.debug({ clientId, deviceId: msg.deviceId, data }, 'Sensor data generated and sent')
-            ws.send(JSON.stringify({ type: 'sensorData', data }))
+            ws.send(msg.command)
             break
           }
 
