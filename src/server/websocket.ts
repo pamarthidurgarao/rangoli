@@ -14,8 +14,41 @@ function generateSensorData(deviceId: string): SensorData {
   }
 }
 
+const BROADCAST_INTERVAL_MS = 3000
+
+function broadcast(wss: WebSocketServer, payload: unknown): void {
+  const msg = JSON.stringify(payload)
+  for (const client of wss.clients) {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(msg)
+    }
+  }
+}
+
 export function setupWebSocket(server: Server): void {
   const wss = new WebSocketServer({ server, path: '/ws' })
+
+  // Periodically push sensor data for all registered devices to all clients
+  const broadcastTimer = setInterval(() => {
+    if (wss.clients.size === 0 || devices.size === 0) return
+
+    for (const [deviceId, device] of devices) {
+      const data = generateSensorData(deviceId)
+
+      const history = sensorHistory.get(deviceId) ?? []
+      history.push(data)
+      if (history.length > 100) history.shift()
+      sensorHistory.set(deviceId, history)
+
+      device.lastUpdate = data.timestamp
+      devices.set(deviceId, device)
+
+      logger.debug({ deviceId, clients: wss.clients.size }, 'Broadcasting sensor data')
+      broadcast(wss, { type: 'sensorData', data })
+    }
+  }, BROADCAST_INTERVAL_MS)
+
+  server.on('close', () => clearInterval(broadcastTimer))
 
   let clientCount = 0
 
@@ -24,6 +57,10 @@ export function setupWebSocket(server: Server): void {
     const clientIp = req.socket.remoteAddress ?? 'unknown'
     const clientId = `ws-${clientCount}`
     logger.info({ clientId, clientIp, totalClients: wss.clients.size }, 'WebSocket client connected')
+
+    setInterval(() => {
+      ws.send("Hello from local server");
+    }, 3000);
 
     ws.on('message', (raw) => {
       const rawStr = raw.toString()

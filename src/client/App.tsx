@@ -164,19 +164,32 @@ function App() {
 
     try {
       const ws = new WebSocket(wsUrl)
-      ws.onopen = () => {
-        setConnectionStatus('connected')
-        addWsMessage({ type: 'system', text: 'WebSocket connected' })
-      }
       ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data as string)
           addWsMessage({ type: 'received', text: JSON.stringify(data, null, 2) })
           if (data.type === 'sensorData') {
-            setSensorData(prev => ({ ...prev, [data.data.deviceId]: data.data }))
+            const payload: SensorData = data.data
+            setSensorData(prev => ({ ...prev, [payload.deviceId]: payload }))
+            setChartData(prev => {
+              const point: ChartPoint = { time: new Date().toLocaleTimeString(), ...payload }
+              return {
+                ...prev,
+                [payload.deviceId]: [...(prev[payload.deviceId] ?? []).slice(-20), point],
+              }
+            })
           }
         } catch {
           addWsMessage({ type: 'received', text: event.data as string })
+        }
+      }
+      ws.onopen = () => {
+        setConnectionStatus('connected')
+        addWsMessage({ type: 'system', text: 'WebSocket connected' })
+        // stop demo simulation — real data now coming in
+        if (intervalRef.current) {
+          clearInterval(intervalRef.current)
+          intervalRef.current = null
         }
       }
       ws.onclose = () => {
